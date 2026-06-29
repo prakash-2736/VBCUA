@@ -6,6 +6,7 @@ logger = config.logger
 
 _sbert_model = None
 
+# cache_resource caches SBERT models to avoid recreating PyTorch weights on every Streamlit script rerun.
 @st.cache_resource(max_entries=1)
 def get_sbert_model(model_name="all-MiniLM-L6-v2"):
     """
@@ -17,6 +18,7 @@ def get_sbert_model(model_name="all-MiniLM-L6-v2"):
     logger.info("Sentence-BERT model loaded successfully.")
     return model
 
+# cache_resource is used to cache reference concept embeddings because the reference concepts are static.
 @st.cache_resource
 def get_reference_embedding(reference_text):
     """
@@ -52,6 +54,15 @@ def calculate_semantic_similarity(student_text, reference_text):
         
         cos_sim = util.cos_sim(student_emb, ref_emb)
         raw_val = float(cos_sim.cpu().numpy()[0][0])
+        
+        # Release temporary student and similarity tensors to free PyTorch/NumPy memory early.
+        # ref_emb is managed by st.cache_resource, so we only safely delete its local variable reference.
+        try:
+            del student_emb
+            del ref_emb
+            del cos_sim
+        except NameError:
+            pass
         
         lower_bound = 0.2
         upper_bound = 0.95

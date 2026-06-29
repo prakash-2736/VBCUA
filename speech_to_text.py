@@ -6,6 +6,7 @@ import config
 logger = config.logger
 
 
+# cache_resource is used to prevent reloading the model on every Streamlit rerun, saving RAM and start time.
 @st.cache_resource(max_entries=1)
 def get_whisper_model(model_size="base"):
     """
@@ -38,9 +39,15 @@ def transcribe_audio(file_path_or_array, model_size="base"):
     try:
         model = get_whisper_model(model_size)
         result = model.transcribe(file_path_or_array, fp16=False)
+        text = result.get("text", "").strip()
+        segments = result.get("segments", [])
+        
+        # Release temporary Whisper outputs early to free CPU memory allocations
+        del result
+        
         return {
-            "text": result.get("text", "").strip(),
-            "segments": result.get("segments", []),
+            "text": text,
+            "segments": segments,
             "error": None,
         }
     except Exception as e:

@@ -11,9 +11,19 @@ import semantic_eval
 import scoring_engine
 import report_generator
 
+# Try loading static logo for page icon / favicon using Pillow to ensure it updates in Chrome
+try:
+    from PIL import Image
+    if os.path.exists("static/image.png"):
+        page_icon_obj = Image.open("static/image.png")
+    else:
+        page_icon_obj = config.APP_ICON
+except Exception:
+    page_icon_obj = config.APP_ICON
+
 st.set_page_config(
     page_title=config.APP_TITLE,
-    page_icon=config.APP_ICON,
+    page_icon=page_icon_obj,
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -27,13 +37,83 @@ trigger_periodic_cleanup()
 
 st.markdown("""
 <style>
-    /* Hide Streamlit Developer UI */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    [data-testid="stHeader"] {display: none !important;}
-    [data-testid="stToolbar"] {display: none !important;}
-    [data-testid="stDecoration"] {display: none !important;}
+/* ===========================
+   STREAMLIT 1.58 UI CLEANUP
+   =========================== */
+
+/* Hide Main Menu */
+#MainMenu {
+    visibility: hidden;
+}
+
+/* Hide Footer */
+footer {
+    visibility: hidden !important;
+}
+
+/* Hide Deploy Button */
+[data-testid="stAppDeployButton"] {
+    display: none !important;
+}
+
+/* Hide Decoration */
+[data-testid="stDecoration"] {
+    display: none !important;
+}
+
+/* Keep header transparent */
+header[data-testid="stHeader"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Keep toolbar visible (DO NOT HIDE IT) */
+[data-testid="stToolbar"] {
+    background: transparent !important;
+}
+
+/* Sidebar styling */
+[data-testid="stSidebar"] {
+    background: #0B1329;
+    border-right: 1px solid rgba(255,255,255,.06);
+}
+
+/* Reduce top spacing */
+.block-container {
+    padding-top: 0.8rem !important;
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background: #0B1329;
+    border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Sidebar Toggle Button */
+[data-testid="collapsedSidebar"],
+[data-testid="stSidebarCollapseButton"],
+.stSidebarCollapseButton {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 999999 !important;
+
+    background: rgba(255,255,255,0.10) !important;
+    border-radius: 8px !important;
+    color: white !important;
+}
+
+/* Hover */
+[data-testid="collapsedSidebar"]:hover,
+[data-testid="stSidebarCollapseButton"]:hover {
+    background: rgba(79,172,254,.25) !important;
+}
+
+/* Remove top padding left by Streamlit */
+section.main > div {
+    padding-top: 0rem !important;
+}
 
     /* Dark Mode Core Aesthetics */
     .stApp {
@@ -194,7 +274,22 @@ if "last_audio_id" not in st.session_state:
     st.session_state.last_audio_id = None
 
 with st.sidebar:
-    st.markdown("<div class='sidebar-brand'>🎙️ VBCUA</div>", unsafe_allow_html=True)
+    if os.path.exists("static/image.png"):
+        try:
+            import base64
+            with open("static/image.png", "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode()
+            st.markdown(
+                f"<div style='display: flex; align-items: center; gap: 8px; margin-bottom: 0.15rem;'>"
+                f"<img src='data:image/png;base64,{img_b64}' style='height: 28px; width: auto; object-fit: contain;' />"
+                f"<span class='sidebar-brand' style='margin-bottom: 0;'>VBCUA</span>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+        except Exception:
+            st.markdown("<div class='sidebar-brand'>🎙️ VBCUA</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='sidebar-brand'>🎙️ VBCUA</div>", unsafe_allow_html=True)
     st.markdown("<div class='sidebar-tagline'>Voice-Based Concept Understanding Analyser</div>", unsafe_allow_html=True)
     st.subheader("Learner Profile Setup")
     student_name = st.text_input("Learner Name", value="", placeholder="Enter name (e.g. John Doe)")
@@ -222,13 +317,12 @@ with st.sidebar:
         
     st.markdown("---")
     st.subheader("Model Parameter Tweaks")
-    selected_model_option = st.selectbox(
+    whisper_model_size = st.selectbox(
         "Whisper Speech-to-Text Model:",
-        options=["tiny", "base", "small (exceeds 512MB RAM - may crash)"],
+        options=["tiny", "base"],
         index=1,
         help="Higher model sizes offer greater transcription accuracy, but take longer to compute and use much more RAM."
     )
-    whisper_model_size = "small" if "small" in selected_model_option else selected_model_option
 
 st.markdown(f"<div class='main-title'>{config.APP_TITLE}</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>Evaluate conceptual understanding and speaking quality with speech-to-text, acoustic features, and semantic modeling.</div>", unsafe_allow_html=True)
@@ -318,6 +412,11 @@ if audio_file_path is not None:
                         transcript_text = ""
                     else:
                         transcript_text = transcription_result["text"]
+                        # Release transcription_result dict early as it's no longer needed
+                        try:
+                            del transcription_result
+                        except NameError:
+                            pass
                         if not transcript_text.strip():
                             st.warning("No speech was detected in the recording. Scores may be very low.")
 

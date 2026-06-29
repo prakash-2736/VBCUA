@@ -3,7 +3,7 @@ import re
 
 # General UI settings
 APP_TITLE = "Voice-Based Concept Understanding Analyser (VBCUA)"
-APP_ICON = "🎙️"
+APP_ICON = "static/image.png" if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "image.png")) else "🎙️"
 
 # Path settings
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -51,7 +51,7 @@ def cleanup_old_files(threshold_seconds=86400):
 
 
 ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a"}
-MAX_UPLOAD_MB = 50
+MAX_UPLOAD_MB = 20
 
 
 def safe_filename(text, max_length=80):
