@@ -143,7 +143,7 @@ def generate_pdf_report(student_name, topic, transcript, reference_concept, audi
         )
         
         story.append(Paragraph("Voice-Based Concept Understanding Analyser", title_style))
-        story.append(Paragraph(f"SkillWallet Academic & Practical Evaluation Report • Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", subtitle_style))
+        story.append(Paragraph(f"VBCUA Academic & Practical Evaluation Report • Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", subtitle_style))
         
         metadata_data = [
             [Paragraph("Student Name:", bold_label_style), Paragraph(_pdf_text(student_name if student_name else "Anonymous Learner"), value_style),

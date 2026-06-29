@@ -12,7 +12,7 @@ VBCUA is an AI-powered educational assessment system designed to evaluate how ef
 - **Filler Word Detection**: Locates common speech filler terms (e.g. *um*, *uh*, *like*, *actually*, *basically*) and reports counts and ratios.
 - **Intelligent Scoring & Classification**: Merges all metrics to score student understanding (0-100) and classifies performance (*Strong*, *Moderate*, or *Poor*).
 - **Visual Waveform Analysis**: Plots audio amplitude and visually highlights silent regions.
-- **PDF Report Generation**: Assembles evaluation scores, detailed benchmarks, waveform plots, and AI-driven tips into a professional ReportLab PDF document suitable for portfolio platforms (e.g. SkillWallet).
+- **PDF Report Generation**: Assembles evaluation scores, detailed benchmarks, waveform plots, and AI-driven tips into a professional ReportLab PDF document suitable for academic and professional portfolios.
 
 ---
 

@@ -238,7 +238,7 @@ with col_desc:
         "</div>",
         unsafe_allow_html=True,
     )
-    run_demo = st.button("🚀 Run Demo Evaluation", use_container_width=True)
+    run_demo = st.button("🚀 Run Demo Evaluation", width="stretch")
 
 audio_file_path = None
 is_demo = False
@@ -267,7 +267,7 @@ elif run_demo:
     st.session_state.last_audio_id = current_audio_id
 
 if audio_file_path is not None:
-    run_eval = st.button("🔍 Run Full Concept Evaluation", type="primary", use_container_width=True) or is_demo
+    run_eval = st.button("🔍 Run Full Concept Evaluation", type="primary", width="stretch") or is_demo
     if run_eval:
         with st.status("Analyzing explanation... Please wait", expanded=True) as status:
             pipeline_ok = True
@@ -427,7 +427,7 @@ if eval_data is not None:
             <div class="metric-card" style="height: 100%;">
                 <div class="metric-title">Classification</div>
                 <div class="class-pill {class_class}">{classification}</div>
-                <div style="margin-top: 0.5rem;">SkillWallet Benchmark</div>
+                <div style="margin-top: 0.5rem;">Academic Benchmark</div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -496,7 +496,7 @@ if eval_data is not None:
         
         with col_acoustic_graph:
             if eval_data["waveform_plot_path"] and os.path.exists(eval_data["waveform_plot_path"]):
-                st.image(eval_data["waveform_plot_path"], caption="Voice Amplitude & Speech-Silence Segmentation Graph", use_container_width=True)
+                st.image(eval_data["waveform_plot_path"], caption="Voice Amplitude & Speech-Silence Segmentation Graph", width="stretch")
             else:
                 st.warning("Waveform plot not available.")
                 
@@ -527,7 +527,7 @@ if eval_data is not None:
 
     with tab_pdf:
         st.markdown("### Export Evaluation Report")
-        st.write("Generate and download a professional academic report in PDF format. This report can be submitted to faculty, portfolio platforms, or included in your SkillWallet dashboard.")
+        st.write("Generate and download a professional academic report in PDF format. This report can be submitted to faculty, portfolio platforms, or included in your academic portfolio.")
         
         pdf_path = eval_data["pdf_path"]
         if os.path.exists(pdf_path):
@@ -540,7 +540,7 @@ if eval_data is not None:
                 file_name=eval_data.get("download_filename", f"VBCUA_Evaluation_{config.safe_filename(eval_data['topic'])}.pdf"),
                 mime="application/pdf",
                 key="download_pdf_report",
-                use_container_width=True,
+                width="stretch",
                 type="primary",
             )
 
@@ -550,7 +550,7 @@ if eval_data is not None:
             display_name = eval_data.get("student_name") or "Anonymous Learner"
             st.info(f"""
             - **Document Type:** Voice-Based Concept Understanding Evaluation Report
-            - **Institution/Context:** SkillWallet Academic Portfolio
+            - **Institution/Context:** Academic Portfolio
             - **Student Name:** {display_name}
             - **Evaluated Concept:** {eval_data['topic']}
             - **Overall Score:** {scoring_results['overall_score']:.1f}%
