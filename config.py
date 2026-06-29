@@ -15,6 +15,41 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(REPORTS_DIR, exist_ok=True)
 os.makedirs(ASSETS_DIR, exist_ok=True)
 
+import logging
+import time
+import glob
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("VBCUA")
+
+
+def cleanup_old_files(threshold_seconds=86400):
+    """
+    Deletes temporary files in TEMP_DIR and REPORTS_DIR older than threshold_seconds.
+    Keeps directories intact.
+    """
+    now = time.time()
+    cleaned_count = 0
+    for folder in [TEMP_DIR, REPORTS_DIR]:
+        if not os.path.exists(folder):
+            continue
+        for file_path in glob.glob(os.path.join(folder, "*")):
+            try:
+                if os.path.isfile(file_path):
+                    file_age = now - os.path.getmtime(file_path)
+                    if file_age > threshold_seconds:
+                        os.remove(file_path)
+                        cleaned_count += 1
+            except Exception as e:
+                logger.error(f"Error deleting file {file_path}: {e}")
+    if cleaned_count > 0:
+        logger.info(f"Cleaned up {cleaned_count} temporary files older than {threshold_seconds}s.")
+
+
 ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a"}
 MAX_UPLOAD_MB = 50
 

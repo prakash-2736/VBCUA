@@ -1,19 +1,30 @@
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
+import streamlit as st
+import config
+
+logger = config.logger
 
 _sbert_model = None
 
+@st.cache_resource(max_entries=1)
 def get_sbert_model(model_name="all-MiniLM-L6-v2"):
     """
-    Lazy loads and caches the Sentence-Transformer model.
+    Lazy loads and caches the Sentence-Transformer model using Streamlit's cache_resource.
     'all-MiniLM-L6-v2' is very fast, accurate, and has a small footprint (~80MB).
     """
-    global _sbert_model
-    if _sbert_model is None:
-        print(f"Loading Sentence-BERT model '{model_name}'...")
-        _sbert_model = SentenceTransformer(model_name)
-        print("Sentence-BERT model loaded successfully.")
-    return _sbert_model
+    logger.info(f"Loading Sentence-BERT model '{model_name}'...")
+    model = SentenceTransformer(model_name)
+    logger.info("Sentence-BERT model loaded successfully.")
+    return model
+
+@st.cache_resource
+def get_reference_embedding(reference_text):
+    """
+    Generates and caches the semantic embedding for the static reference concepts.
+    """
+    model = get_sbert_model()
+    return model.encode(reference_text, convert_to_tensor=True)
 
 def calculate_semantic_similarity(student_text, reference_text):
     """
@@ -34,9 +45,13 @@ def calculate_semantic_similarity(student_text, reference_text):
     try:
         model = get_sbert_model()
         
-        embeddings = model.encode([student_text, reference_text], convert_to_tensor=True)
+        # Encode student explanation (dynamic, calculated per request)
+        student_emb = model.encode(student_text, convert_to_tensor=True)
         
-        cos_sim = util.cos_sim(embeddings[0], embeddings[1])
+        # Retrieve cached reference embedding
+        ref_emb = get_reference_embedding(reference_text)
+        
+        cos_sim = util.cos_sim(student_emb, ref_emb)
         raw_val = float(cos_sim.cpu().numpy()[0][0])
         
         lower_bound = 0.2
@@ -54,7 +69,7 @@ def calculate_semantic_similarity(student_text, reference_text):
             "raw_cosine": round(raw_val, 4)
         }
     except Exception as e:
-        print(f"Error calculating semantic similarity: {e}")
+        logger.error(f"Error calculating semantic similarity: {e}")
         return {
             "similarity_score": 0.0,
             "raw_cosine": 0.0

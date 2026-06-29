@@ -6,6 +6,9 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+import config
+
+logger = config.logger
 
 
 def _pdf_text(text):
@@ -283,7 +286,5 @@ def generate_pdf_report(student_name, topic, transcript, reference_concept, audi
         return True
         
     except Exception as e:
-        print(f"Error generating PDF: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error generating PDF: {e}", exc_info=True)
         return False

@@ -1,23 +1,27 @@
 import os
 import librosa
-import soundfile as sf
 import numpy as np
 import matplotlib
 matplotlib.use("Agg") 
 import matplotlib.pyplot as plt
 import config
 
-def get_audio_duration(file_path):
+logger = config.logger
+
+def get_audio_duration(file_path_or_data):
     """Get the duration of an audio file in seconds."""
     try:
-        y, sr = librosa.load(file_path, sr=None)
+        if isinstance(file_path_or_data, tuple):
+            y, sr = file_path_or_data
+        else:
+            y, sr = librosa.load(file_path_or_data, sr=None)
         duration = librosa.get_duration(y=y, sr=sr)
         return float(duration)
     except Exception as e:
-        print(f"Error getting duration: {e}")
+        logger.error(f"Error getting duration: {e}")
         return 0.0
 
-def extract_audio_features(file_path):
+def extract_audio_features(file_path_or_data):
     """
     Extracts key audio metrics from an audio file:
     - Duration
@@ -28,7 +32,10 @@ def extract_audio_features(file_path):
     - Speech Confidence (based on spectral flatness and energy)
     """
     try:
-        y, sr = librosa.load(file_path, sr=16000)
+        if isinstance(file_path_or_data, tuple):
+            y, sr = file_path_or_data
+        else:
+            y, sr = librosa.load(file_path_or_data, sr=16000)
         duration = librosa.get_duration(y=y, sr=sr)
         
         if duration == 0:
@@ -84,7 +91,7 @@ def extract_audio_features(file_path):
         }
         
     except Exception as e:
-        print(f"Error extracting audio features: {e}")
+        logger.error(f"Error extracting audio features: {e}")
         return {
             "duration": 0.0,
             "rms_energy": 0.0,
@@ -94,19 +101,24 @@ def extract_audio_features(file_path):
             "speech_confidence": 0.0
         }
 
-def generate_waveform_plot(file_path, output_filename="waveform.png"):
+def generate_waveform_plot(file_path_or_data, output_filename="waveform.png"):
     """
     Generates a high-quality visualization of the waveform.
     Uses an elegant dark theme with a vibrant blue/cyan waveform
     and highlights the non-silent vs silent segments.
     """
+    fig = None
     try:
-        y, sr = librosa.load(file_path, sr=16000)
+        if isinstance(file_path_or_data, tuple):
+            y, sr = file_path_or_data
+        else:
+            y, sr = librosa.load(file_path_or_data, sr=16000)
         duration = librosa.get_duration(y=y, sr=sr)
         time = np.linspace(0, duration, len(y))
         
         plt.style.use('dark_background')
-        fig, ax = plt.subplots(figsize=(10, 4.5), dpi=150)
+        # Optimized memory usage by setting DPI to 100 (reduces raw canvas RAM consumption)
+        fig, ax = plt.subplots(figsize=(10, 4.5), dpi=100)
         
         if len(y) > 50000:
             step = len(y) // 50000
@@ -145,9 +157,14 @@ def generate_waveform_plot(file_path, output_filename="waveform.png"):
         
         output_path = os.path.join(config.TEMP_DIR, output_filename)
         plt.savefig(output_path, facecolor='#121212', edgecolor='none', bbox_inches='tight')
-        plt.close(fig)
-        
         return output_path
     except Exception as e:
-        print(f"Error generating waveform plot: {e}")
+        logger.error(f"Error generating waveform plot: {e}")
         return None
+    finally:
+        if fig is not None:
+            fig.clf()
+            plt.close(fig)
+        plt.close('all')
+        import gc
+        gc.collect()

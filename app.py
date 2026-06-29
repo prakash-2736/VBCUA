@@ -3,7 +3,6 @@ import time
 import numpy as np
 import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
 
 import config
 import audio_utils
@@ -18,6 +17,26 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Run periodic cleanup of old temporary files (at most once per hour)
+@st.cache_resource(ttl=3600)
+def trigger_periodic_cleanup():
+    config.cleanup_old_files(threshold_seconds=86400)
+
+trigger_periodic_cleanup()
+
+# Warm up models on startup using st.cache_resource
+@st.cache_resource
+def warmup_models():
+    try:
+        config.logger.info("Initializing models on startup...")
+        semantic_eval.get_sbert_model()
+        speech_to_text.get_whisper_model("base")
+        config.logger.info("Models initialized successfully on startup.")
+    except Exception as e:
+        config.logger.error(f"Error during model warm-up on startup: {e}")
+
+warmup_models()
 
 st.markdown("""
 <style>
@@ -208,12 +227,13 @@ with st.sidebar:
         
     st.markdown("---")
     st.subheader("Model Parameter Tweaks")
-    whisper_model_size = st.selectbox(
+    selected_model_option = st.selectbox(
         "Whisper Speech-to-Text Model:",
-        options=["tiny", "base", "small"],
+        options=["tiny", "base", "small (exceeds 512MB RAM - may crash)"],
         index=1,
-        help="Higher model sizes offer greater transcription accuracy, but take longer to compute."
+        help="Higher model sizes offer greater transcription accuracy, but take longer to compute and use much more RAM."
     )
+    whisper_model_size = "small" if "small" in selected_model_option else selected_model_option
 
 st.markdown(f"<div class='main-title'>{config.APP_TITLE}</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>Evaluate conceptual understanding and speaking quality with speech-to-text, acoustic features, and semantic modeling.</div>", unsafe_allow_html=True)
@@ -273,7 +293,14 @@ if audio_file_path is not None:
             pipeline_ok = True
 
             status.write("📂 Loading audio and extracting acoustic parameters...")
-            audio_features = audio_utils.extract_audio_features(audio_file_path)
+            try:
+                import librosa
+                y, sr = librosa.load(audio_file_path, sr=16000)
+                audio_data = (y, sr)
+                audio_features = audio_utils.extract_audio_features(audio_data)
+            except Exception as e:
+                audio_features = {"duration": 0.0}
+                config.logger.error(f"Error loading audio file: {e}")
 
             if audio_features["duration"] <= 0:
                 pipeline_ok = False
@@ -287,7 +314,8 @@ if audio_file_path is not None:
                 if is_demo:
                     transcript_text = get_demo_transcript(selected_topic)
                 else:
-                    transcription_result = speech_to_text.transcribe_audio(audio_file_path, whisper_model_size)
+                    # Pass the pre-loaded numpy array to avoid duplicate disk reading and audio loading
+                    transcription_result = speech_to_text.transcribe_audio(y, whisper_model_size)
                     if transcription_result.get("error"):
                         pipeline_ok = False
                         status.update(label="Transcription failed", state="error")
@@ -317,9 +345,23 @@ if audio_file_path is not None:
                     )
 
                     status.write("📊 Generating visual acoustics graph...")
-                    waveform_plot_path = audio_utils.generate_waveform_plot(audio_file_path, "current_waveform.png")
-                    if not waveform_plot_path:
+                    waveform_filename = f"waveform_{config.safe_filename(current_audio_id)}.png"
+                    waveform_plot_path = os.path.join(config.TEMP_DIR, waveform_filename)
+                    if not os.path.exists(waveform_plot_path):
+                        waveform_plot_path = audio_utils.generate_waveform_plot(audio_data, waveform_filename)
+                    
+                    # Release large NumPy audio arrays early to optimize RAM
+                    try:
+                        del y
+                        del audio_data
+                    except NameError:
+                        pass
+                    import gc
+                    gc.collect()
+
+                    if not waveform_plot_path or not os.path.exists(waveform_plot_path):
                         st.warning("Waveform plot could not be generated, but other results are available.")
+                        waveform_plot_path = None
 
                     status.write("📄 Building professional PDF report...")
                     pdf_path = os.path.join(config.REPORTS_DIR, f"evaluation_report_{int(time.time())}.pdf")
@@ -339,6 +381,7 @@ if audio_file_path is not None:
                         status.update(label="PDF generation failed", state="error")
                         st.error("PDF report could not be generated. Please try running the evaluation again.")
                     else:
+                        # Storing pdf_path instead of pdf_bytes in session state to prevent RAM accumulation
                         download_filename = f"VBCUA_Evaluation_{config.safe_filename(selected_topic)}.pdf"
                         st.session_state.evaluation = {
                             "transcript": transcript_text,
@@ -529,22 +572,25 @@ if eval_data is not None:
         st.markdown("### Export Evaluation Report")
         st.write("Generate and download a professional academic report in PDF format. This report can be submitted to faculty, portfolio platforms, or included in your academic portfolio.")
         
-        pdf_path = eval_data["pdf_path"]
-        if os.path.exists(pdf_path):
-            with open(pdf_path, "rb") as f:
-                pdf_bytes = f.read()
+        pdf_path = eval_data.get("pdf_path")
+        if pdf_path and os.path.exists(pdf_path):
+            try:
+                with open(pdf_path, "rb") as f:
+                    pdf_bytes = f.read()
+                
+                st.download_button(
+                    label="📥 Download PDF Evaluation Report",
+                    data=pdf_bytes,
+                    file_name=eval_data.get("download_filename", f"VBCUA_Evaluation_{config.safe_filename(eval_data['topic'])}.pdf"),
+                    mime="application/pdf",
+                    key="download_pdf_report",
+                    width="stretch",
+                    type="primary",
+                )
 
-            st.download_button(
-                label="📥 Download PDF Evaluation Report",
-                data=pdf_bytes,
-                file_name=eval_data.get("download_filename", f"VBCUA_Evaluation_{config.safe_filename(eval_data['topic'])}.pdf"),
-                mime="application/pdf",
-                key="download_pdf_report",
-                width="stretch",
-                type="primary",
-            )
-
-            st.success("PDF report is ready. Your browser will save it with a `.pdf` extension.")
+                st.success("PDF report is ready. Your browser will save it with a `.pdf` extension.")
+            except Exception as e:
+                st.error(f"Error reading PDF file: {e}")
 
             st.markdown("#### Report Document Details")
             display_name = eval_data.get("student_name") or "Anonymous Learner"
