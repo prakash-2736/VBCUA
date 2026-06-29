@@ -8,19 +8,6 @@ import config
 
 logger = config.logger
 
-def get_audio_duration(file_path_or_data):
-    """Get the duration of an audio file in seconds."""
-    try:
-        if isinstance(file_path_or_data, tuple):
-            y, sr = file_path_or_data
-        else:
-            y, sr = librosa.load(file_path_or_data, sr=None)
-        duration = librosa.get_duration(y=y, sr=sr)
-        return float(duration)
-    except Exception as e:
-        logger.error(f"Error getting duration: {e}")
-        return 0.0
-
 def extract_audio_features(file_path_or_data):
     """
     Extracts key audio metrics from an audio file:
@@ -45,13 +32,13 @@ def extract_audio_features(file_path_or_data):
                 "pause_ratio": 0.0,
                 "speech_duration": 0.0,
                 "num_pauses": 0,
-                "speech_confidence": 0.0
+                "speech_confidence": 0.0,
+                "non_silent_intervals": None
             }
         
         rms_frames = librosa.feature.rms(y=y)
         mean_rms = float(np.mean(rms_frames))
         
-       
         non_silent_intervals = librosa.effects.split(y, top_db=35)
         
         if len(non_silent_intervals) > 0:
@@ -66,7 +53,6 @@ def extract_audio_features(file_path_or_data):
             pause_ratio = 1.0
             num_pauses = 0
             
-       
         flatness = librosa.feature.spectral_flatness(y=y)
         rms_threshold = np.percentile(rms_frames, 20)
         active_frames = rms_frames[0] > rms_threshold
@@ -87,7 +73,8 @@ def extract_audio_features(file_path_or_data):
             "pause_ratio": float(np.clip(pause_ratio, 0.0, 1.0)),
             "speech_duration": float(speech_duration),
             "num_pauses": int(num_pauses),
-            "speech_confidence": float(np.clip(speech_confidence, 0.0, 1.0))
+            "speech_confidence": float(np.clip(speech_confidence, 0.0, 1.0)),
+            "non_silent_intervals": non_silent_intervals
         }
         
     except Exception as e:
@@ -98,10 +85,11 @@ def extract_audio_features(file_path_or_data):
             "pause_ratio": 0.0,
             "speech_duration": 0.0,
             "num_pauses": 0,
-            "speech_confidence": 0.0
+            "speech_confidence": 0.0,
+            "non_silent_intervals": None
         }
 
-def generate_waveform_plot(file_path_or_data, output_filename="waveform.png"):
+def generate_waveform_plot(file_path_or_data, output_filename="waveform.png", duration=None, non_silent_intervals=None):
     """
     Generates a high-quality visualization of the waveform.
     Uses an elegant dark theme with a vibrant blue/cyan waveform
@@ -113,7 +101,10 @@ def generate_waveform_plot(file_path_or_data, output_filename="waveform.png"):
             y, sr = file_path_or_data
         else:
             y, sr = librosa.load(file_path_or_data, sr=16000)
-        duration = librosa.get_duration(y=y, sr=sr)
+            
+        if duration is None:
+            duration = float(len(y) / sr)
+            
         time = np.linspace(0, duration, len(y))
         
         plt.style.use('dark_background')
@@ -132,7 +123,9 @@ def generate_waveform_plot(file_path_or_data, output_filename="waveform.png"):
         
         ax.fill_between(time_plot, y_plot, color='#4FACFE', alpha=0.2)
         
-        non_silent_intervals = librosa.effects.split(y, top_db=35)
+        if non_silent_intervals is None:
+            non_silent_intervals = librosa.effects.split(y, top_db=35)
+            
         for i, interval in enumerate(non_silent_intervals):
             start_time = interval[0] / sr
             end_time = interval[1] / sr

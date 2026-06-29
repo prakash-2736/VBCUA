@@ -25,21 +25,16 @@ def trigger_periodic_cleanup():
 
 trigger_periodic_cleanup()
 
-# Warm up models on startup using st.cache_resource
-@st.cache_resource
-def warmup_models():
-    try:
-        config.logger.info("Initializing models on startup...")
-        semantic_eval.get_sbert_model()
-        speech_to_text.get_whisper_model("base")
-        config.logger.info("Models initialized successfully on startup.")
-    except Exception as e:
-        config.logger.error(f"Error during model warm-up on startup: {e}")
-
-warmup_models()
-
 st.markdown("""
 <style>
+    /* Hide Streamlit Developer UI */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stHeader"] {display: none !important;}
+    [data-testid="stToolbar"] {display: none !important;}
+    [data-testid="stDecoration"] {display: none !important;}
+
     /* Dark Mode Core Aesthetics */
     .stApp {
         background: radial-gradient(circle at 50% 50%, #0F172A 0%, #020617 100%);
@@ -348,7 +343,12 @@ if audio_file_path is not None:
                     waveform_filename = f"waveform_{config.safe_filename(current_audio_id)}.png"
                     waveform_plot_path = os.path.join(config.TEMP_DIR, waveform_filename)
                     if not os.path.exists(waveform_plot_path):
-                        waveform_plot_path = audio_utils.generate_waveform_plot(audio_data, waveform_filename)
+                        waveform_plot_path = audio_utils.generate_waveform_plot(
+                            audio_data, 
+                            waveform_filename,
+                            duration=audio_features.get("duration"),
+                            non_silent_intervals=audio_features.get("non_silent_intervals")
+                        )
                     
                     # Release large NumPy audio arrays early to optimize RAM
                     try:

@@ -283,6 +283,10 @@ def generate_pdf_report(student_name, topic, transcript, reference_concept, audi
             story.append(Paragraph("No major criticisms. Your delivery was effective and conceptually comprehensive.", body_style))
             
         doc.build(story)
+        story.clear()
+        del story
+        import gc
+        gc.collect()
         return True
         
     except Exception as e:
