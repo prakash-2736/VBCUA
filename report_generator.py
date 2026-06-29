@@ -1,10 +1,17 @@
 import os
 from datetime import datetime
+from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, KeepTogether, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+
+
+def _pdf_text(text):
+    """Escape user text for ReportLab Paragraph XML markup."""
+    return escape(text or "")
+
 
 def generate_pdf_report(student_name, topic, transcript, reference_concept, audio_features, scoring_results, waveform_path, output_path):
     """
@@ -139,8 +146,8 @@ def generate_pdf_report(student_name, topic, transcript, reference_concept, audi
         story.append(Paragraph(f"SkillWallet Academic & Practical Evaluation Report • Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", subtitle_style))
         
         metadata_data = [
-            [Paragraph("Student Name:", bold_label_style), Paragraph(student_name if student_name else "Anonymous Learner", value_style),
-             Paragraph("Topic / Concept:", bold_label_style), Paragraph(topic, value_style)],
+            [Paragraph("Student Name:", bold_label_style), Paragraph(_pdf_text(student_name if student_name else "Anonymous Learner"), value_style),
+             Paragraph("Topic / Concept:", bold_label_style), Paragraph(_pdf_text(topic), value_style)],
             [Paragraph("Audio Duration:", bold_label_style), Paragraph(f"{audio_features.get('duration', 0.0):.2f} seconds", value_style),
              Paragraph("Speaking Pace:", bold_label_style), Paragraph(f"{int(audio_features.get('wpm', 0)):d} WPM", value_style)],
         ]
@@ -187,29 +194,43 @@ def generate_pdf_report(student_name, topic, transcript, reference_concept, audi
         story.append(Spacer(1, 15))
         
         story.append(Paragraph("Acoustic Feature Breakdown", h2_style))
+        confidence_pct = audio_features.get("speech_confidence", 0.0) * 100.0
+        rms_val = audio_features.get("rms_energy", 0.0)
         acoustic_data = [
             [Paragraph("Metric", bold_label_style), Paragraph("Value", bold_label_style), Paragraph("Benchmark", bold_label_style), Paragraph("Acoustic Rating", bold_label_style)],
             [
-                Paragraph("Pause Ratio", value_style), 
-                Paragraph(f"{audio_features.get('pause_ratio', 0.0)*100:.1f}%", value_style), 
+                Paragraph("Pause Ratio", value_style),
+                Paragraph(f"{audio_features.get('pause_ratio', 0.0)*100:.1f}%", value_style),
                 Paragraph("10% - 25%", value_style),
                 Paragraph(f"{scoring_results.get('pause_score', 0.0):.1f}/100", value_style)
             ],
             [
-                Paragraph("Speech Confidence", value_style), 
-                Paragraph(f"{audio_features.get('speech_confidence', 0.0)*100:.1f}%", value_style), 
-                Paragraph("> 65%", value_style),
-                Paragraph(f"{audio_features.get('speech_confidence', 0.0)*100:.1f}/100", value_style)
+                Paragraph("Pause Count", value_style),
+                Paragraph(f"{audio_features.get('num_pauses', 0)}", value_style),
+                Paragraph("Natural breaks", value_style),
+                Paragraph("Info", value_style)
             ],
             [
-                Paragraph("Filler Word Ratio", value_style), 
-                Paragraph(f"{scoring_results.get('filler_ratio', 0.0):.1f}%", value_style), 
+                Paragraph("Speech Confidence", value_style),
+                Paragraph(f"{confidence_pct:.1f}%", value_style),
+                Paragraph("> 65%", value_style),
+                Paragraph(f"{confidence_pct:.1f}/100", value_style)
+            ],
+            [
+                Paragraph("RMS Energy (Loudness)", value_style),
+                Paragraph(f"{rms_val:.4f}", value_style),
+                Paragraph("Clear signal", value_style),
+                Paragraph("Info", value_style)
+            ],
+            [
+                Paragraph("Filler Word Ratio", value_style),
+                Paragraph(f"{scoring_results.get('filler_ratio', 0.0):.1f}%", value_style),
                 Paragraph("< 2.0%", value_style),
                 Paragraph(f"{scoring_results.get('filler_score', 0.0):.1f}/100", value_style)
             ],
             [
-                Paragraph("Speaking Rate", value_style), 
-                Paragraph(f"{int(audio_features.get('wpm', 0))} WPM", value_style), 
+                Paragraph("Speaking Rate", value_style),
+                Paragraph(f"{int(audio_features.get('wpm', 0))} WPM", value_style),
                 Paragraph("110 - 150 WPM", value_style),
                 Paragraph(f"{scoring_results.get('speech_rate_score', 0.0):.1f}/100", value_style)
             ]
@@ -241,11 +262,12 @@ def generate_pdf_report(student_name, topic, transcript, reference_concept, audi
         story.append(Paragraph("Conceptual Content Comparison", h2_style))
         
         story.append(Paragraph("Student's Transcribed Explanation:", bold_label_style))
-        story.append(Paragraph(f"<i>\"{transcript if transcript else '[No speech detected or transcribed]'}\"</i>", ParagraphStyle('TranscriptItalic', parent=body_style, fontSize=9, textColor=colors.HexColor("#4A5568"))))
-        
+        transcript_display = _pdf_text(transcript) if transcript else "[No speech detected or transcribed]"
+        story.append(Paragraph(f'<i>"{transcript_display}"</i>', ParagraphStyle('TranscriptItalic', parent=body_style, fontSize=9, textColor=colors.HexColor("#4A5568"))))
+
         story.append(Spacer(1, 5))
         story.append(Paragraph("Target Reference Concept Definition:", bold_label_style))
-        story.append(Paragraph(reference_concept, ParagraphStyle('RefText', parent=body_style, fontSize=9, textColor=colors.HexColor("#718096"))))
+        story.append(Paragraph(_pdf_text(reference_concept), ParagraphStyle('RefText', parent=body_style, fontSize=9, textColor=colors.HexColor("#718096"))))
         
         story.append(Spacer(1, 10))
         story.append(Paragraph("AI Recommendations & Key Suggestions", h2_style))
@@ -253,7 +275,7 @@ def generate_pdf_report(student_name, topic, transcript, reference_concept, audi
         suggestions = scoring_results.get("suggestions", [])
         if suggestions:
             for sugg in suggestions:
-                story.append(Paragraph(f"• {sugg}", feedback_item_style))
+                story.append(Paragraph(f"• {_pdf_text(sugg)}", feedback_item_style))
         else:
             story.append(Paragraph("No major criticisms. Your delivery was effective and conceptually comprehensive.", body_style))
             

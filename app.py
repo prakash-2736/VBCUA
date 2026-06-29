@@ -97,6 +97,35 @@ st.markdown("""
         background-color: #0B1329;
         border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
+
+    /* Step & panel styling */
+    .step-panel {
+        background: rgba(30, 41, 59, 0.35);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .results-banner {
+        background: linear-gradient(90deg, rgba(79, 172, 254, 0.12) 0%, rgba(0, 242, 254, 0.08) 100%);
+        border: 1px solid rgba(79, 172, 254, 0.25);
+        border-radius: 10px;
+        padding: 0.85rem 1.25rem;
+        margin-bottom: 1.25rem;
+        color: #E2E8F0;
+        font-size: 0.95rem;
+    }
+    .sidebar-brand {
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #4FACFE;
+        margin-bottom: 0.15rem;
+    }
+    .sidebar-tagline {
+        color: #64748B;
+        font-size: 0.85rem;
+        margin-bottom: 1rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -107,20 +136,52 @@ def create_sample_wav():
         import scipy.io.wavfile as wav
         sample_rate = 16000
         t = np.linspace(0, 4.0, int(sample_rate * 4.0), endpoint=False)
-        envelope = np.sin(2 * np.pi * 0.5 * t) ** 2  
+        envelope = np.sin(2 * np.pi * 0.5 * t) ** 2
         tone1 = np.sin(2 * np.pi * 220 * t)
         tone2 = np.sin(2 * np.pi * 440 * t)
         audio = (0.5 * tone1 + 0.3 * tone2) * envelope
         audio = (audio * 32767).astype(np.int16)
-        
         wav.write(sample_path, sample_rate, audio)
     return sample_path
 
-if 'evaluation' not in st.session_state:
+
+def get_demo_transcript(topic):
+    """Return a canned transcript matched to the selected demo topic."""
+    if "OOP" in topic or "Object-Oriented" in topic:
+        return (
+            "Object oriented programming is a programming paradigm that works with objects and classes. "
+            "It has four main pillars which are encapsulation, inheritance, polymorphism, and abstraction. "
+            "Encapsulation is about binding fields and methods. Inheritance allows creating sub classes. "
+            "Polymorphism allows different classes to share interfaces, and abstraction hides implementation details."
+        )
+    if "TCP" in topic:
+        return (
+            "The TCP handshake is the three way handshake to connect a client and server. "
+            "First the client sends a SYN packet to synchronize. Next, the server replies with a SYN ACK "
+            "which stands for synchronize acknowledge. Actually, like, then the client replies back with an ACK packet. "
+            "After this is done, the connection is established and we can transmit data."
+        )
+    if "Photosynthesis" in topic:
+        return (
+            "Photosynthesis is how plants make food using sunlight. Basically, it takes carbon dioxide and water "
+            "in the presence of light and chlorophyll to produce glucose and oxygen. It has light dependent reactions "
+            "and the Calvin cycle in the chloroplasts. Uh, sort of, it makes sugars."
+        )
+    return (
+        "Database normalization is the process of organizing data in a database to avoid data redundancy and preserve "
+        "data integrity. We have first normal form which requires atomic values, second normal form which relies on "
+        "full key dependency, and third normal form which makes sure there are no transitive dependencies in the table."
+    )
+
+
+if "evaluation" not in st.session_state:
     st.session_state.evaluation = None
+if "last_audio_id" not in st.session_state:
+    st.session_state.last_audio_id = None
 
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/microphone.png", width=64)
+    st.markdown("<div class='sidebar-brand'>🎙️ VBCUA</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-tagline'>Voice-Based Concept Understanding Analyser</div>", unsafe_allow_html=True)
     st.subheader("Learner Profile Setup")
     student_name = st.text_input("Learner Name", value="", placeholder="Enter name (e.g. John Doe)")
     
@@ -161,127 +222,155 @@ col_audio, col_desc = st.columns([2, 1])
 
 with col_audio:
     st.markdown("### 🎙️ Step 1: Input Explanation")
-    uploaded_file = st.file_uploader("Upload Audio File (WAV format recommended):", type=["wav", "mp3", "m4a"])
-    
+    uploaded_file = st.file_uploader(
+        "Upload Audio File (WAV recommended; MP3/M4A supported):",
+        type=["wav", "mp3", "m4a"],
+        help=f"Maximum recommended size: {config.MAX_UPLOAD_MB} MB",
+    )
+
 with col_desc:
-    st.markdown("### 💡 Testing Instructions")
-    st.write("1. Choose a concept on the sidebar.")
-    st.write("2. Upload an audio recording explaining that concept.")
-    st.write("3. Don't have a WAV file? Click the button below to load a simulated audio assessment instantly.")
-    
+    st.markdown("### 💡 How It Works")
+    st.markdown(
+        "<div class='step-panel'>"
+        "<p>1. Choose a concept in the sidebar.</p>"
+        "<p>2. Upload a recording or run the built-in demo.</p>"
+        "<p>3. Click <strong>Run Full Concept Evaluation</strong> to analyse speech, semantics, and delivery.</p>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
     run_demo = st.button("🚀 Run Demo Evaluation", use_container_width=True)
 
 audio_file_path = None
 is_demo = False
+current_audio_id = None
 
 if uploaded_file is not None:
-    file_extension = os.path.splitext(uploaded_file.name)[1]
-    audio_file_path = os.path.join(config.TEMP_DIR, f"upload_{int(time.time())}{file_extension}")
-    with open(audio_file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    st.success("Audio file uploaded successfully! Ready for analysis.")
+    upload_size_mb = len(uploaded_file.getbuffer()) / (1024 * 1024)
+    if upload_size_mb > config.MAX_UPLOAD_MB:
+        st.error(f"File too large ({upload_size_mb:.1f} MB). Please upload a file under {config.MAX_UPLOAD_MB} MB.")
+    else:
+        file_extension = os.path.splitext(uploaded_file.name)[1].lower()
+        if file_extension not in config.ALLOWED_AUDIO_EXTENSIONS:
+            file_extension = ".wav"
+        current_audio_id = f"upload_{uploaded_file.name}_{uploaded_file.size}"
+        audio_file_path = os.path.join(config.TEMP_DIR, f"upload_{int(time.time())}{file_extension}")
+        with open(audio_file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        if st.session_state.last_audio_id != current_audio_id:
+            st.session_state.evaluation = None
+        st.session_state.last_audio_id = current_audio_id
+        st.success(f"Audio uploaded ({upload_size_mb:.1f} MB). Click **Run Full Concept Evaluation** to begin.")
 elif run_demo:
     audio_file_path = create_sample_wav()
     is_demo = True
+    current_audio_id = "demo"
+    st.session_state.last_audio_id = current_audio_id
 
 if audio_file_path is not None:
-    if st.button("🔍 Run Full Concept Evaluation", type="primary", use_container_width=True) or is_demo:
+    run_eval = st.button("🔍 Run Full Concept Evaluation", type="primary", use_container_width=True) or is_demo
+    if run_eval:
         with st.status("Analyzing explanation... Please wait", expanded=True) as status:
-            
+            pipeline_ok = True
+
             status.write("📂 Loading audio and extracting acoustic parameters...")
             audio_features = audio_utils.extract_audio_features(audio_file_path)
-            
-            status.write("🗣️ Transcribing speech with OpenAI Whisper (this may take a few seconds)...")
-            if is_demo:
-                if "OOP" in selected_topic:
-                    transcript_text = (
-                        "Object oriented programming is a programming paradigm that works with objects and classes. "
-                        "It has four main pillars which are encapsulation, inheritance, polymorphism, and abstraction. "
-                        "Encapsulation is about binding fields and methods. Inheritance allows creating sub classes. "
-                        "Polymorphism allows different classes to share interfaces, and abstraction hides implementation details."
-                    )
-                elif "TCP" in selected_topic:
-                    transcript_text = (
-                        "The TCP handshake is the three way handshake to connect a client and server. "
-                        "First the client sends a SYN packet to synchronize. Next, the server replies with a SYN ACK "
-                        "which stands for synchronize acknowledge. Actually, like, then the client replies back with an ACK packet. "
-                        "After this is done, the connection is established and we can transmit data."
-                    )
-                elif "Photosynthesis" in selected_topic:
-                    transcript_text = (
-                        "Photosynthesis is how plants make food using sunlight. Basically, it takes carbon dioxide and water "
-                        "in the presence of light and chlorophyll to produce glucose and oxygen. It has light dependent reactions "
-                        "and the Calvin cycle in the chloroplasts. Uh, sort of, it makes sugars."
-                    )
+
+            if audio_features["duration"] <= 0:
+                pipeline_ok = False
+                status.update(label="Audio could not be processed", state="error")
+                st.error(
+                    "Could not read a valid audio signal. "
+                    "Please upload WAV, MP3, or M4A (MP3/M4A require ffmpeg installed on the system)."
+                )
+            else:
+                status.write("🗣️ Transcribing speech with OpenAI Whisper (this may take a few seconds)...")
+                if is_demo:
+                    transcript_text = get_demo_transcript(selected_topic)
                 else:
-                    transcript_text = (
-                        "Database normalization is the process of organizing data in a database to avoid data redundancy and preserve "
-                        "data integrity. We have first normal form which requires atomic values, second normal form which relies on "
-                        "full key dependency, and third normal form which makes sure there are no transitive dependencies in the table."
+                    transcription_result = speech_to_text.transcribe_audio(audio_file_path, whisper_model_size)
+                    if transcription_result.get("error"):
+                        pipeline_ok = False
+                        status.update(label="Transcription failed", state="error")
+                        st.error(f"Whisper transcription failed: {transcription_result['error']}")
+                        transcript_text = ""
+                    else:
+                        transcript_text = transcription_result["text"]
+                        if not transcript_text.strip():
+                            st.warning("No speech was detected in the recording. Scores may be very low.")
+
+                if pipeline_ok:
+                    status.write("🧠 Performing semantic analysis against reference concept...")
+                    semantic_results = semantic_eval.calculate_semantic_similarity(transcript_text, reference_text)
+
+                    status.write("⏱️ Analysing delivery and detecting filler words...")
+                    filler_results = scoring_engine.analyze_filler_words(transcript_text)
+
+                    duration = audio_features["duration"]
+                    words_count = len(transcript_text.split()) if transcript_text.strip() else 0
+                    audio_features["wpm"] = (words_count / duration) * 60.0 if duration > 0 else 0.0
+
+                    status.write("📈 Integrating scores & evaluating performance...")
+                    scoring_results = scoring_engine.calculate_understanding_score(
+                        semantic_results["similarity_score"],
+                        audio_features,
+                        filler_results["ratio"],
                     )
-                
-                segments = [{"start": 0.0, "end": 10.0, "text": transcript_text}]
-            else:
-                transcription_result = speech_to_text.transcribe_audio(audio_file_path, whisper_model_size)
-                transcript_text = transcription_result["text"]
-                segments = transcription_result["segments"]
-                
-            status.write("🧠 Performing semantic analysis against reference concept...")
-            semantic_results = semantic_eval.calculate_semantic_similarity(transcript_text, reference_text)
-            
-            status.write("⏱️ Analysing delivery and detecting filler words...")
-            filler_results = scoring_engine.analyze_filler_words(transcript_text)
-            
-            duration = audio_features["duration"]
-            if duration > 0:
-                words_count = len(transcript_text.split())
-                wpm = (words_count / duration) * 60.0
-            else:
-                wpm = 0.0
-            audio_features["wpm"] = wpm
-            
-            status.write("📈 Integrating scores & evaluating performance...")
-            scoring_results = scoring_engine.calculate_understanding_score(
-                semantic_results["similarity_score"],
-                audio_features,
-                filler_results["ratio"]
-            )
-            
-            status.write("📊 Generating visual acoustics graph...")
-            waveform_plot_path = audio_utils.generate_waveform_plot(audio_file_path, "current_waveform.png")
-            
-            status.write("📄 Building professional PDF report...")
-            pdf_path = os.path.join(config.REPORTS_DIR, f"evaluation_report_{int(time.time())}.pdf")
-            report_generator.generate_pdf_report(
-                student_name,
-                selected_topic,
-                transcript_text,
-                reference_text,
-                audio_features,
-                scoring_results,
-                waveform_plot_path,
-                pdf_path
-            )
-            
-            st.session_state.evaluation = {
-                "transcript": transcript_text,
-                "audio_features": audio_features,
-                "semantic_results": semantic_results,
-                "filler_results": filler_results,
-                "scoring_results": scoring_results,
-                "waveform_plot_path": waveform_plot_path,
-                "pdf_path": pdf_path,
-                "topic": selected_topic,
-                "reference_concept": reference_text,
-                "student_name": student_name
-            }
-            status.update(label="Evaluation Complete!", state="complete", expanded=False)
+
+                    status.write("📊 Generating visual acoustics graph...")
+                    waveform_plot_path = audio_utils.generate_waveform_plot(audio_file_path, "current_waveform.png")
+                    if not waveform_plot_path:
+                        st.warning("Waveform plot could not be generated, but other results are available.")
+
+                    status.write("📄 Building professional PDF report...")
+                    pdf_path = os.path.join(config.REPORTS_DIR, f"evaluation_report_{int(time.time())}.pdf")
+                    pdf_ok = report_generator.generate_pdf_report(
+                        student_name,
+                        selected_topic,
+                        transcript_text,
+                        reference_text,
+                        audio_features,
+                        scoring_results,
+                        waveform_plot_path,
+                        pdf_path,
+                    )
+
+                    if not pdf_ok:
+                        pipeline_ok = False
+                        status.update(label="PDF generation failed", state="error")
+                        st.error("PDF report could not be generated. Please try running the evaluation again.")
+                    else:
+                        download_filename = f"VBCUA_Evaluation_{config.safe_filename(selected_topic)}.pdf"
+                        st.session_state.evaluation = {
+                            "transcript": transcript_text,
+                            "audio_features": audio_features,
+                            "semantic_results": semantic_results,
+                            "filler_results": filler_results,
+                            "scoring_results": scoring_results,
+                            "waveform_plot_path": waveform_plot_path,
+                            "pdf_path": pdf_path,
+                            "download_filename": download_filename,
+                            "topic": selected_topic,
+                            "reference_concept": reference_text,
+                            "student_name": student_name,
+                            "evaluated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "is_demo": is_demo,
+                        }
+                        status.update(label="Evaluation complete!", state="complete", expanded=False)
+                        st.toast("Evaluation finished — explore your results in the tabs below.", icon="✅")
 
 eval_data = st.session_state.evaluation
 
 if eval_data is not None:
     st.markdown("---")
-    
+    demo_tag = " (Demo Mode)" if eval_data.get("is_demo") else ""
+    st.markdown(
+        f"<div class='results-banner'>"
+        f"📊 Results for <strong>{eval_data['topic']}</strong>{demo_tag} "
+        f"— evaluated at {eval_data.get('evaluated_at', 'N/A')}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
     tab_overview, tab_semantic, tab_acoustic, tab_pdf = st.tabs([
         "📋 Overview Dashboard", 
         "🧠 Semantic Concept Alignment", 
@@ -413,16 +502,22 @@ if eval_data is not None:
                 
         with col_acoustic_metrics:
             st.markdown("#### Delivery Performance Breakdown")
-            
-            st.metric("Speaking Pace", f"{int(audio_features['wpm'])} Words / Min", 
-                      delta="Optimal: 110-150" if 110 <= audio_features['wpm'] <= 150 else "Sub-optimal")
-                      
-            st.metric("Pause Ratio", f"{audio_features['pause_ratio']*100:.1f}% of speech",
-                      delta="Optimal: 10%-25%" if 0.10 <= audio_features['pause_ratio'] <= 0.25 else "Sub-optimal")
-                      
+
+            m1, m2 = st.columns(2)
+            with m1:
+                st.metric("Speaking Pace", f"{int(audio_features['wpm'])} WPM",
+                          delta="Optimal: 110-150" if 110 <= audio_features['wpm'] <= 150 else "Sub-optimal")
+                st.metric("Pause Count", f"{audio_features.get('num_pauses', 0)}",
+                          help="Number of detected silent gaps between speech segments.")
+            with m2:
+                st.metric("Pause Ratio", f"{audio_features['pause_ratio']*100:.1f}%",
+                          delta="Optimal: 10%-25%" if 0.10 <= audio_features['pause_ratio'] <= 0.25 else "Sub-optimal")
+                st.metric("RMS Energy", f"{audio_features.get('rms_energy', 0.0):.4f}",
+                          help="Root-mean-square loudness of the recording. Higher usually means clearer signal.")
+
             st.metric("Speech Confidence Index", f"{audio_features['speech_confidence']*100:.1f}%",
                       help="Measures voicing stability and energy above the noise floor.")
-                      
+
             st.metric("Filler Words Used", f"{filler_results['count']} filler(s) ({filler_results['ratio']:.1f}%)")
             st.caption(filler_results["feedback"])
             
@@ -438,26 +533,38 @@ if eval_data is not None:
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
                 pdf_bytes = f.read()
-                
+
             st.download_button(
                 label="📥 Download PDF Evaluation Report",
                 data=pdf_bytes,
-                file_name=f"VBCUA_Evaluation_{selected_topic.replace(' ', '_')}_{int(time.time())}.pdf",
+                file_name=eval_data.get("download_filename", f"VBCUA_Evaluation_{config.safe_filename(eval_data['topic'])}.pdf"),
                 mime="application/pdf",
-                use_container_width=True
+                key="download_pdf_report",
+                use_container_width=True,
+                type="primary",
             )
-            
-            st.success("PDF Report generated successfully and is ready for download.")
-            
+
+            st.success("PDF report is ready. Your browser will save it with a `.pdf` extension.")
+
             st.markdown("#### Report Document Details")
+            display_name = eval_data.get("student_name") or "Anonymous Learner"
             st.info(f"""
             - **Document Type:** Voice-Based Concept Understanding Evaluation Report
             - **Institution/Context:** SkillWallet Academic Portfolio
-            - **Student Name:** {student_name if student_name else 'Anonymous Learner'}
-            - **Evaluated Concept:** {selected_topic}
+            - **Student Name:** {display_name}
+            - **Evaluated Concept:** {eval_data['topic']}
             - **Overall Score:** {scoring_results['overall_score']:.1f}%
             - **Classification:** {classification}
-            - **File Path:** `{pdf_path}`
+            - **Generated:** {eval_data.get('evaluated_at', 'N/A')}
             """)
         else:
-            st.error("Generated PDF report not found.")
+            st.error("Generated PDF report not found. Please re-run the evaluation.")
+else:
+    st.markdown("---")
+    st.markdown(
+        "<div class='step-panel' style='text-align:center; padding: 2rem;'>"
+        "<p style='font-size:1.1rem; color:#94A3B8; margin:0;'>"
+        "Upload audio or run the demo to see your evaluation dashboard here."
+        "</p></div>",
+        unsafe_allow_html=True,
+    )

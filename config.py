@@ -1,4 +1,5 @@
 import os
+import re
 
 # General UI settings
 APP_TITLE = "Voice-Based Concept Understanding Analyser (VBCUA)"
@@ -13,6 +14,19 @@ ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(REPORTS_DIR, exist_ok=True)
 os.makedirs(ASSETS_DIR, exist_ok=True)
+
+ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a"}
+MAX_UPLOAD_MB = 50
+
+
+def safe_filename(text, max_length=80):
+    """Sanitize text for browser-safe download filenames (no path separators)."""
+    if not text or not str(text).strip():
+        return "report"
+    cleaned = re.sub(r"[^\w\-.]", "_", str(text).replace(" ", "_"))
+    cleaned = re.sub(r"_+", "_", cleaned).strip("._")
+    return cleaned[:max_length] or "report"
+
 
 REFERENCE_CONCEPTS = {
     "Object-Oriented Programming (OOP)": (

@@ -88,6 +88,7 @@ def calculate_understanding_score(semantic_score, audio_features, filler_ratio):
             "speech_rate_score": 0.0,
             "pause_score": 0.0,
             "filler_score": 0.0,
+            "filler_ratio": round(float(filler_ratio), 2),
             "classification": "Poor Understanding",
             "suggestions": ["Please record a valid audio response."]
         }
@@ -155,6 +156,7 @@ def calculate_understanding_score(semantic_score, audio_features, filler_ratio):
         "speech_rate_score": round(speech_rate_score, 2),
         "pause_score": round(pause_score, 2),
         "filler_score": round(filler_score, 2),
+        "filler_ratio": round(float(filler_ratio), 2),
         "classification": classification,
         "suggestions": suggestions
     }
